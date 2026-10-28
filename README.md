@@ -1,5 +1,7 @@
 # Coffin Dance
 
+[Play Coffin Dance](https://pnaaberi.github.io/coffin-dance/)
+
 A browser rhythm game. Hit **← ↓ ↑ →** (or tap the arrow buttons on a phone) as the buttons reach the gold
 handle to keep the pallbearers in step and the coffin on their shoulders. Every song gets faster; drop the
 coffin and it's game over. Scores are saved in your browser by default; an optional Supabase setup
@@ -40,12 +42,13 @@ python3 -m http.server 8000      # then open http://localhost:8000
 
 ## Deploy (GitHub Pages)
 
-1. Push this folder to a GitHub repository.
-2. **Settings → Pages** → Source: *Deploy from a branch*, branch `main`, folder `/ (root)`.
-3. The game is live at `https://<user>.github.io/<repo>/` after a minute.
-4. In `index.html`, change `og:image` to the full address
-   (`https://<user>.github.io/<repo>/assets/og-image.png`) and `og:url` to the game address, so link
-   previews work everywhere.
+This repository publishes to **https://pnaaberi.github.io/coffin-dance/** from `main`, folder `/ (root)`.
+Pushes to `main` trigger a Pages deployment. Check **Actions → pages build and deployment** for its result.
+The `.nojekyll` file keeps this a static site with no build step.
+
+For a fork, enable **Settings → Pages → Deploy from a branch**, select `main` and `/ (root)`, then update
+`og:image` and `og:url` in `index.html` to the fork's full Pages addresses.
+To roll back a source change, revert its commit and push; to take the site offline, use **Settings → Pages → Unpublish site**.
 
 ## Online high scores (Supabase)
 
