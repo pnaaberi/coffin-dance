@@ -47,7 +47,7 @@ export async function submitScore(entry) {
     await fetchBoard(); return { ok: true };
   }
   try {
-    const r = await fetch(base(), { method: 'POST', headers: { ...headers(), Prefer: 'return=minimal' }, body: JSON.stringify(entry) });
+    const r = await fetch(config.submissionUrl || base(), { method: 'POST', headers: { ...headers(), Prefer: 'return=minimal' }, body: JSON.stringify(entry) });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       // database rules (supabase/name_filter.sql, supabase/protection.sql)

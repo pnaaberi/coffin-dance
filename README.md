@@ -91,7 +91,7 @@ not anonymous: it can be guessed for known IP addresses. Hosting providers may a
 Run the leaderboard regression checks with Node.js 22 or later:
 
 ```sh
-node --test tests/*.test.mjs
+node --experimental-strip-types --test tests/*.test.mjs
 ```
 
 They cover local saves, corrupted browser storage, unsafe score fields, invalid submissions, and online
@@ -142,3 +142,20 @@ The browser loads models from Polyfork, which receives the request's network met
 - [three.js](https://threejs.org), MIT licence (`vendor/three/LICENSE`).
 - Music and sound effects: original, generated live in the browser.
 - Inspired by the *Coffin Dance* meme.
+
+## Protected submission rollout (prepared, not deployed)
+
+1. Run `supabase/guarded_submit.sql` in the SQL Editor.
+2. Deploy `supabase/functions/submit-score/index.ts` as the `submit-score` Edge Function,
+   with JWT verification disabled (`supabase/config.toml`). The function uses the platform-provided
+   `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; never put the latter in browser code.
+3. Set `submissionUrl` in `js/config.js` to your project's
+   `https://<project>.supabase.co/functions/v1/submit-score`, deploy the client, and test saving.
+4. Only after that succeeds, run `supabase/lock_direct_writes.sql`.
+5. Verify direct inserts and public RPC calls fail, but function submissions and board reads work.
+
+The new RPC serializes writes and enforces a global 40-score/minute ceiling. It does not trust caller IP
+headers. It still accepts client-reported scores, so fabricated plausible scores and exhaustion of the
+shared quota remain possible. CAPTCHA, per-player limits, and gameplay validation are further work.
+Before step 4, rollback by clearing submissionUrl. After step 4, keep direct writes disabled and repair
+or redeploy the function; simply clearing submissionUrl would break saving.
