@@ -23,3 +23,5 @@ artifacts/
 # Polyfork models must not be redistributed: never commit them
 *.glb
 *.gltf
+
+/supabase/.temp/

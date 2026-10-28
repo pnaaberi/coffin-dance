@@ -9,6 +9,9 @@ begin
   if (select count(*) from public.scores where created_at > clock_timestamp() - interval '1 minute') >= 40 then
     raise exception 'rate_limited';
   end if;
+  -- The downstream request comes from an Edge server, not the player's IP.
+  -- Avoid treating every player as that one server; the atomic global cap above applies.
+  perform pg_catalog.set_config('request.headers', '{}', true);
   insert into public.scores(name, score, level) values (player_name, player_score, player_level);
 end;
 $$;

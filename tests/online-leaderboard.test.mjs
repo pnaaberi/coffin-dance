@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import config from '../js/config.js';
 
 config.url = 'https://scores.example.test';
+config.submissionUrl = config.url + '/functions/v1/submit-score';
 config.anonKey = 'sb_publishable_test_fixture';
 const board = await import('../js/leaderboard.js');
 let calls = [];
@@ -28,6 +29,7 @@ test('online save sends permitted fields and refreshes the board', async () => {
   const result = await board.submitScore({ name: 'Runner', score: 300, level: 1, client_hash: 'not allowed' });
   assert.deepEqual(result, { ok: true });
   assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, config.submissionUrl);
   assert.deepEqual(JSON.parse(calls[0].body), { name: 'Runner', score: 300, level: 1 });
   assert.equal(calls[0].headers.Prefer, 'return=minimal');
   assert.equal(calls[1].method, undefined);

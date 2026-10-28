@@ -65,9 +65,9 @@ is intended to be public; database policies control access. Forks should configu
 clear both fields for local scores. Never use a service-role or secret key in browser code.
 Run all three SQL scripts before enabling the online board; `schema.sql` alone is not the hardened setup.
 
-The current hosted database accepts scoreboard reads but does not yet have the optional `client_hash`
-column from `protection.sql`. The extra hardening below requires applying the SQL in the Supabase SQL
-Editor; publishing these files to GitHub does not migrate the live database.
+The hosted database has the name filter and protection SQL installed. Score submissions use the
+`submit-score` Edge Function. Deployment is staged: verify the function and client before running
+`lock_direct_writes.sql`. Publishing SQL files to GitHub does not apply database migrations.
 
 After all three scripts are applied, the database enforces these rules even for direct API calls:
 
@@ -143,7 +143,7 @@ The browser loads models from Polyfork, which receives the request's network met
 - Music and sound effects: original, generated live in the browser.
 - Inspired by the *Coffin Dance* meme.
 
-## Protected submission rollout (prepared, not deployed)
+## Protected submission deployment
 
 1. Run `supabase/guarded_submit.sql` in the SQL Editor.
 2. Deploy `supabase/functions/submit-score/index.ts` as the `submit-score` Edge Function,
