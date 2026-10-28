@@ -1,5 +1,5 @@
 - [x] Build and test shared deterministic rules and replay validation.
 - [x] Build and test private run storage, atomic checkpoints and finalization.
 - [x] Integrate client recording, pause/resume, retry and verified display.
-- [ ] Validate staged deployment, valid and invalid live flows; retire legacy writes.
-- [ ] Update documentation, verify release and archive specification.
+- [x] Validate staged deployment, valid and invalid live flows; retire legacy writes.
+- [x] Update documentation, verify release and archive specification.
