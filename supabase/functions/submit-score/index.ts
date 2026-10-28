@@ -1,6 +1,6 @@
 // Public entry point; only this server holds the service-role credential.
 const origin = Deno.env.get('GAME_ORIGIN') || 'https://pnaaberi.github.io';
-const cors = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'apikey, content-type, authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Vary': 'Origin' };
+const cors = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'apikey, content-type, authorization, prefer', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Vary': 'Origin' };
 const reply = (status: number, value: unknown) => new Response(JSON.stringify(value), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response(null, { headers: cors });

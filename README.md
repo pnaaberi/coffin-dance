@@ -66,8 +66,9 @@ clear both fields for local scores. Never use a service-role or secret key in br
 Run all three SQL scripts before enabling the online board; `schema.sql` alone is not the hardened setup.
 
 The hosted database has the name filter and protection SQL installed. Score submissions use the
-`submit-score` Edge Function. Deployment is staged: verify the function and client before running
-`lock_direct_writes.sql`. Publishing SQL files to GitHub does not apply database migrations.
+`submit-score` Edge Function. Direct public inserts, updates and deletes are disabled, and only the
+server role can call the guarded submission helper. The helper enforces an atomic global cap of
+40 successful submissions per minute. Publishing SQL files to GitHub does not apply database migrations.
 
 After all three scripts are applied, the database enforces these rules even for direct API calls:
 

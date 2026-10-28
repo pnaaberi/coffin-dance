@@ -28,3 +28,8 @@ test('surfaces database throttle and conceals internal failures', async () => {
   assert.equal(response.status,503);
   assert.equal((await response.text()).includes('private database details'),false);
 });
+test('browser preflight permits the headers used by the score client', async () => {
+  const response=await handler(new Request('https://function.example.test',{method:'OPTIONS'}));
+  const allowed=response.headers.get('Access-Control-Allow-Headers').toLowerCase().split(',').map(x=>x.trim());
+  for(const header of ['apikey','content-type','authorization','prefer']) assert.ok(allowed.includes(header),header);
+});
