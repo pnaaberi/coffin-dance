@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import config from '../js/config.js';
+
+// Exercise the supported offline fallback without touching the real scoreboard.
+config.url = '';
+config.anonKey = '';
 
 const saved = new Map();
 globalThis.localStorage = {

@@ -4,8 +4,8 @@
 
 A browser rhythm game. Hit **← ↓ ↑ →** (or tap the arrow buttons on a phone) as the buttons reach the gold
 handle to keep the pallbearers in step and the coffin on their shoulders. Every song gets faster; drop the
-coffin and it's game over. Scores are saved in your browser by default; an optional Supabase setup
-adds a shared online board.
+coffin and it's game over. The published game saves scores to a shared online board.
+Forks can clear the URL and publishable key in `js/config.js` to use browser-local scores instead.
 
 Built with [three.js](https://threejs.org) and the Web Audio API. No build step and nothing to install.
 
@@ -60,10 +60,16 @@ Run these in the Supabase **SQL Editor**, in order (each is safe to run again):
 
 Then put the **Project URL** and **publishable** key in `js/config.js`, and a `contact` (email or a GitHub
 issues link) so players know how to get a name removed.
-The repository ships with empty credentials. Never use a service-role or secret key in browser code.
+This repository includes the game's public Supabase URL and publishable browser key. A publishable key
+is intended to be public; database policies control access. Forks should configure their own project or
+clear both fields for local scores. Never use a service-role or secret key in browser code.
 Run all three SQL scripts before enabling the online board; `schema.sql` alone is not the hardened setup.
 
-What the database enforces, even against someone calling the API directly with the public key:
+The current hosted database accepts scoreboard reads but does not yet have the optional `client_hash`
+column from `protection.sql`. The extra hardening below requires applying the SQL in the Supabase SQL
+Editor; publishing these files to GitHub does not migrate the live database.
+
+After all three scripts are applied, the database enforces these rules even for direct API calls:
 
 - read only `name, score, level, created_at`; insert only `name, score, level`; no update or delete
 - names: 1 to 16 characters from letters, numbers, spaces and `. _ - '`, passing the profanity filter
@@ -85,10 +91,11 @@ not anonymous: it can be guessed for known IP addresses. Hosting providers may a
 Run the leaderboard regression checks with Node.js 22 or later:
 
 ```sh
-node --test tests/leaderboard.test.mjs
+node --test tests/*.test.mjs
 ```
 
-They cover valid saves, corrupted browser storage, unsafe score fields and invalid submissions.
+They cover local saves, corrupted browser storage, unsafe score fields, invalid submissions, and online
+read/save/error handling. The tests use fixtures and do not write to the live leaderboard.
 The bundled `vendor/three/` files are from three.js r160; keep its MIT licence with any redistribution.
 
 ## Name filter
@@ -118,11 +125,12 @@ generated `profanity.js` into `js/` and `name_filter.sql` into `supabase/`, and 
 
 ## Privacy
 
-The game creates no accounts or cookies. By default scores stay in the player's browser (localStorage),
-along with volume, mute and the last name typed. If the online board is configured, saved names, scores
-and levels are sent to Supabase, timestamped and publicly readable. The scores table also keeps an
-IP-derived hash for rate limiting; this is pseudonymous data, and provider request logs are separate.
-Players can ask for an online entry to be removed via the contact in `js/config.js`.
+The game creates no accounts or cookies. On the published site, saved names, scores and levels are sent
+to Supabase, timestamped and publicly readable. Volume, mute and the last name typed stay in the player's
+browser (localStorage). A fork with online configuration cleared also stores its scores locally.
+When `protection.sql` is applied, the scores table keeps an IP-derived hash for rate limiting; this is
+pseudonymous data, and provider request logs are separate. Players can ask for an online entry to be
+removed via the contact in `js/config.js`.
 The browser loads models from Polyfork, which receives the request's network metadata.
 
 ## Credits
