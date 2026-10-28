@@ -10,7 +10,8 @@ Forks can clear the URL and publishable key in `js/config.js` to use browser-loc
 Built with [three.js](https://threejs.org) and the Web Audio API. No build step and nothing to install.
 
 **Controls:** arrow keys or on-screen buttons · **P** / **Esc** pause · **M** mute.
-The game pauses itself when you switch tabs or apps.
+The game pauses itself when you switch tabs or apps. Each new level is announced as soon as the
+previous song ends; the announcement holds for 2.5 seconds, then fades over half a second.
 
 ## Project structure
 

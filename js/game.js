@@ -377,9 +377,10 @@ const ROT=[Math.PI,Math.PI/2,-Math.PI/2,0],COL=['#ff4fa3','#3ec7ff','#ffd23e','#
 function arrow(x,y,l,a,sz,ghost){cx.save();cx.translate(x,y);cx.rotate(ROT[l]);cx.globalAlpha=a;cx.beginPath();
  cx.moveTo(sz,0);cx.lineTo(0,-sz);cx.lineTo(0,-sz*.45);cx.lineTo(-sz,-sz*.45);cx.lineTo(-sz,sz*.45);cx.lineTo(0,sz*.45);cx.lineTo(0,sz);cx.closePath();
  cx.fillStyle=ghost?'rgba(255,255,255,.25)':COL[l];cx.fill();cx.lineWidth=4*devicePixelRatio;cx.strokeStyle=ghost?'#fff':'#000';cx.stroke();cx.restore()}
-let score=0,combo=0,maxCombo=0,miss=0,hits=0,perf=0,playing=false,judgeT=0,dropT=-1,src,balance=100,catchT=-9,master;
+let score=0,combo=0,maxCombo=0,miss=0,hits=0,perf=0,playing=false,dropT=-1,src,balance=100,catchT=-9,master;
 const judge=document.getElementById('judge');
-function show(txt,c){judge.textContent=txt;judge.style.color=c;judgeT=performance.now()}
+let judgeHoldUntil=0,levelAnnounced=false;
+function show(txt,c,hold=0){const now=performance.now();if(now<judgeHoldUntil&&!hold)return;judge.textContent=txt;judge.style.color=c;judgeHoldUntil=now+hold}
 // AudioContext.currentTime only advances in audio-buffer-sized steps (often 20-40 ms), which made the arrows stutter.
 // Use the high-resolution performance clock, locked to the audio clock, so motion is smooth at the display's full refresh rate.
 let clkOff=null,clkFrame=-1,clkVal=0;
@@ -492,11 +493,11 @@ function endRun(){const b=board(),qualifies=score>0&&(verification.verifiedOnlin
     sv.onclick=save;nm.onkeydown=ev=>{ev.stopPropagation();if(ev.key==='Enter')save()}}}
 function fail(){endRun()}
 function quit(){playing=false;try{src?.stop()}catch{}try{master?.disconnect()}catch{}title()}
-function nextLevel(){const event={kind:'next',level:run.level,t:rulesTime(songTime())};applyEvent(verifiedState,event);verification.record(event);run.level++;cfg=dayCfg(run.level);show('LEVEL '+run.level,'#f3cf6a');start(true)}
+function nextLevel(){const event={kind:'next',level:run.level,t:rulesTime(songTime())};applyEvent(verifiedState,event);verification.record(event);run.level++;cfg=dayCfg(run.level);start(true)}
 function quitRun(){paused=false;playing=false;try{ac.resume()}catch{}try{master?.disconnect()}catch{}title()}
 const ACT={resume:resumeGame,quitrun:quitRun,scores:()=>scores(),title,async play(){ensureAudio();ac.resume();screen('<h1>Starting…</h1>');try{const seed=await verification.startRun();verifiedState=createRun(seed);lastCheckpoint=0;mode='play';newRun();cfg=dayCfg(1);start()}catch{screen('<h1>Couldn’t start online game</h1><p>Check your connection and try again.</p><button data-a="play">Retry</button><button data-a="title">Menu</button>')}}};
 
-function start(cont){ensureAudio();ac.resume();paused=false;
+function start(cont){ensureAudio();ac.resume();paused=false;levelAnnounced=false;if(!cont){judgeHoldUntil=0;}
   noiseB=ac.createBuffer(1,ac.sampleRate*.1,ac.sampleRate);noiseB.getChannelData(0).forEach((_,i,a)=>a[i]=Math.random()*2-1);
   BPM=cfg.bpm;offset=0;BARS=cfg.bars;try{master?.disconnect()}catch{}
   startAt=ac.currentTime+(cont?.2:.8);FLIM=0;body.on=false;ALL().forEach(d=>{d.k.set(0,0,0);d.kv.set(0,0,0);d.palm=0;d.slapped=false});if(!cont){score=combo=maxCombo=0;balance=100}miss=hits=perf=0;dropT=-1;catchT=-9;coffin.rotation.set(0,0,0);coffin.position.set(0,coffinBase,COFFIN_Z);
@@ -675,10 +676,11 @@ function frame(){if(wasPlaying!==playing){wasPlaying=playing;document.body.class
      hintEl.style.opacity=on?1:0}
     fillEl.style.width=balance+'%';fillEl.style.background=balance>60?'#d9a632':balance>30?'#e08a2e':'#b8322a';
     lbl.textContent=`COFFIN BALANCE · Level ${run.level} · x${mult()}`;
+    if(playing&&st>=songLen&&!levelAnnounced){levelAnnounced=true;show('LEVEL '+(run.level+1),'#f3cf6a',2500)}
     if(playing&&st>songLen+.5){playing=false;try{master.disconnect()}catch{}nextLevel()}}
   document.getElementById('score').textContent=playing?score:'';
   document.getElementById('combo').textContent=playing&&combo>2?combo+' combo':'';
-  judge.style.opacity=Math.max(0,1-(now-judgeT)/500);
+  judge.style.opacity=Math.max(0,Math.min(1,1-(now-judgeHoldUntil)/500));
 }
 title();
 document.getElementById('pz').onclick=e=>{e.currentTarget.blur();paused?resumeGame():pauseGame()};
