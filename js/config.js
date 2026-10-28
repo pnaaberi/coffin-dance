@@ -1,6 +1,7 @@
 // Online high scores (Supabase). Leave url/anonKey empty to keep scores only in each player's browser.
 // The publishable/anon key is meant to be public. NEVER put the service_role or secret key here.
 export default {
+  verificationUrl: 'https://nqymnjgebhpjjgfoygbt.supabase.co/functions/v1/gameplay',
   // Saves go through the deployed server endpoint; direct database inserts are disabled.
   submissionUrl: 'https://nqymnjgebhpjjgfoygbt.supabase.co/functions/v1/submit-score',
   url: 'https://nqymnjgebhpjjgfoygbt.supabase.co',

@@ -17,6 +17,10 @@
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
 { "imports": {
+    "./js/config.js": "./js/config.js?v=verified1",
+  "./js/leaderboard.js": "./js/leaderboard.js?v=verified1",
+  "./js/run-client.js": "./js/run-client.js?v=verified1",
+  "./supabase/functions/_shared/gameplay.js": "./supabase/functions/_shared/gameplay.js?v=verified1",
   "three": "./vendor/three/build/three.module.min.js",
   "three/addons/": "./vendor/three/examples/jsm/"
 } }
@@ -38,6 +42,6 @@
   <label class="btn">Use my own song<input id="file" type="file" accept="audio/*" hidden></label>
   <div style="font-size:13px;margin-top:8px">Song BPM: <input id="bpm" type="number" value="126" style="width:60px"> · offset (s): <input id="off" type="number" value="0" step="0.05" style="width:60px"></div>
 </div></div>
-<script type="module" src="js/game.js"></script>
+<script type="module" src="js/game.js?v=verified1"></script>
 </body>
 </html>

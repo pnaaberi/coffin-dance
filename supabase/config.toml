@@ -1,2 +1,5 @@
 [functions.submit-score]
 verify_jwt = false
+
+[functions.gameplay]
+verify_jwt = false

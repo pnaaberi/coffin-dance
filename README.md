@@ -65,27 +65,21 @@ is intended to be public; database policies control access. Forks should configu
 clear both fields for local scores. Never use a service-role or secret key in browser code.
 Run all three SQL scripts before enabling the online board; `schema.sql` alone is not the hardened setup.
 
-The hosted database has the name filter and protection SQL installed. Score submissions use the
-`submit-score` Edge Function. Direct public inserts, updates and deletes are disabled, and only the
-server role can call the guarded submission helper. The helper enforces an atomic global cap of
-40 successful submissions per minute. Publishing SQL files to GitHub does not apply database migrations.
+The published game uses the `gameplay` Edge Function. Before playing, it obtains a random chart seed
+and a private, expiring run token. Arrow presses are sent in ordered batches; the server replays the same
+rules as the browser and calculates the score and level. Pauses stop the server's playable clock.
+A run expires after two hours and can create only one score. Identical retries return the prior result.
 
-After all three scripts are applied, the database enforces these rules even for direct API calls:
+Direct public inserts, updates and deletes are disabled. The old raw-score submission endpoint returns
+an instruction to reload. Only the server role can access run state and commit verified results.
+Older scores are retained as **legacy**; verified results sort first. The public board exposes only
+name, score, level, time and verification status. Name filtering and the atomic global limit of 40 saved
+scores per minute still apply. Starting games has a global limit of 30 per minute.
 
-- read only `name, score, level, created_at`; insert only `name, score, level`; no update or delete
-- names: 1 to 16 characters from letters, numbers, spaces and `. _ - '`, passing the profanity filter
-- scores: a coarse upper bound based on the submitted level
-- best-effort limits of 3 scores per minute per connection hash and 40 per minute globally
-- the time is set by the server; the scores table stores an IP-derived hash instead of the raw address
-- maintenance functions cannot be called by public or authenticated API clients
-
-Scores are still reported by the player's browser, so a determined cheater can post a plausible fake.
-Remove those in **Table Editor → scores**. `supabase/protection.sql` also includes an optional daily
-clean-up job (keeps the top 100 forever and drops other rows after 30 days).
-The trigger's count checks are not atomic under concurrent requests, and its IP headers must come from a
-trusted proxy. These limits are not a denial-of-service defense. Use a trusted submission endpoint and
-atomic rate limiting for an abuse-resistant public leaderboard. The fixed-salt MD5 value is pseudonymous,
-not anonymous: it can be guessed for known IP addresses. Hosting providers may also retain request logs.
+This rejects invented score numbers, impossible input sequences and runs played faster than server time
+(with three seconds of timing tolerance). It does **not** prove a human played: a bot can generate valid
+inputs at normal speed. The shared limits can be exhausted by abusive callers; these are not a complete
+denial-of-service defense. The publishable key is intentionally public and grants no privileged access.
 
 ## Checks
 
@@ -95,8 +89,10 @@ Run the leaderboard regression checks with Node.js 22 or later:
 node --experimental-strip-types --test tests/*.test.mjs
 ```
 
-They cover local saves, corrupted browser storage, unsafe score fields, invalid submissions, and online
-read/save/error handling. The tests use fixtures and do not write to the live leaderboard.
+They cover local saves, unsafe data, deterministic replay, invalid input, token/expiry checks,
+ordered pause/resume, response-loss retries and online error handling. `tests/gameplay-database.sql`
+tests private permissions, timing, pauses and exactly-once finalization against an isolated PostgreSQL
+database with the migrations installed; it rolls back its test rows. The tests use fixtures and do not write to the live leaderboard.
 The bundled `vendor/three/` files are from three.js r160; keep its MIT licence with any redistribution.
 
 ## Name filter
@@ -127,7 +123,9 @@ generated `profanity.js` into `js/` and `name_filter.sql` into `supabase/`, and 
 ## Privacy
 
 The game creates no accounts or cookies. On the published site, saved names, scores and levels are sent
-to Supabase, timestamped and publicly readable. Volume, mute and the last name typed stay in the player's
+to Supabase, timestamped and publicly readable. During online play, arrow inputs are sent to Supabase
+to verify gameplay. The server retains derived run state and a hashed run token for up to two hours;
+expired rows are deleted in bounded batches when new games start (so deletion can occur later if idle). Volume, mute and the last name typed stay in the player's
 browser (localStorage). A fork with online configuration cleared also stores its scores locally.
 When `protection.sql` is applied, the scores table keeps an IP-derived hash for rate limiting; this is
 pseudonymous data, and provider request logs are separate. Players can ask for an online entry to be
@@ -144,19 +142,25 @@ The browser loads models from Polyfork, which receives the request's network met
 - Music and sound effects: original, generated live in the browser.
 - Inspired by the *Coffin Dance* meme.
 
-## Protected submission deployment
+## Verified gameplay deployment
 
-1. Run `supabase/guarded_submit.sql` in the SQL Editor.
-2. Deploy `supabase/functions/submit-score/index.ts` as the `submit-score` Edge Function,
-   with JWT verification disabled (`supabase/config.toml`). The function uses the platform-provided
-   `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; never put the latter in browser code.
-3. Set `submissionUrl` in `js/config.js` to your project's
-   `https://<project>.supabase.co/functions/v1/submit-score`, deploy the client, and test saving.
-4. Only after that succeeds, run `supabase/lock_direct_writes.sql`.
-5. Verify direct inserts and public RPC calls fail, but function submissions and board reads work.
+After the three base SQL scripts above:
 
-The new RPC serializes writes and enforces a global 40-score/minute ceiling. It does not trust caller IP
-headers. It still accepts client-reported scores, so fabricated plausible scores and exhaustion of the
-shared quota remain possible. CAPTCHA, per-player limits, and gameplay validation are further work.
-Before step 4, rollback by clearing submissionUrl. After step 4, keep direct writes disabled and repair
-or redeploy the function; simply clearing submissionUrl would break saving.
+1. Apply `supabase/guarded_submit.sql` and `supabase/lock_direct_writes.sql` if upgrading an older installation.
+2. Apply `supabase/gameplay_verification.sql`. It preserves existing scores and adds private run storage.
+3. Deploy `supabase/functions/gameplay/index.ts` as `gameplay`, with JWT verification disabled
+   (`supabase/config.toml`). It uses platform-provided `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+   Never copy the service-role key into browser code. Set `GAME_ORIGIN` to your site's origin for a fork.
+4. Set `verificationUrl` in `js/config.js` to `https://<project>.supabase.co/functions/v1/gameplay`.
+   Publish the client and verify a complete run, pause/resume and score saving.
+5. Apply `supabase/retire_legacy_submit.sql` and deploy the retiring `submit-score` function.
+   Confirm old raw-score submissions fail and the new route still works.
+
+`supabase/functions/_shared/gameplay.js` contains versioned rules shared by browser and server.
+`js/run-client.js` records ordered batches and retries an identical failed request. Inputs are buffered
+up to 4096 events; exceeding that limit prevents saving instead of silently dropping inputs.
+A failed online start offers Retry. Clearing both URL and publishable key still enables local play.
+
+For rollback, redeploy the last working verified client/function together. Keep direct writes disabled
+and leave the legacy helper revoked; restoring raw-score writes would remove verification. Database
+additions are backward compatible, so there is no need to drop tables or discard scores during rollback.

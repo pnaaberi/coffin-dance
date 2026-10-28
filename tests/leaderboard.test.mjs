@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import config from '../js/config.js';
+config.verificationUrl = ''; // Explicit legacy/offline fixture; no live calls.
 
 // Exercise the supported offline fallback without touching the real scoreboard.
 config.url = '';

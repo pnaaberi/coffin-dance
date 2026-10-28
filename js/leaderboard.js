@@ -1,3 +1,4 @@
+import {finishRun,verifiedOnline} from './run-client.js';
 // High-score board: Supabase when configured in config.js, otherwise this browser's localStorage.
 import config from './config.js';
 import { isCleanName } from './profanity.js';
@@ -8,7 +9,7 @@ const validScore = row => row && typeof row.name === 'string'
   && Number.isSafeInteger(row.level) && row.level >= 1 && row.level <= 200;
 // Validate persisted/API data before any fields reach the HTML score table.
 const tidy = rows => (Array.isArray(rows) ? rows : []).filter(validScore).slice(0, 10).map(r => ({
-  name: isCleanName(r.name) ? r.name : '***', score: r.score, level: r.level,
+  name: isCleanName(r.name) ? r.name : '***', score: r.score, level: r.level, ...(config.verificationUrl?{verified:r.verified===true}:{}),
 }));
 const local = {
   get() { try { return tidy(JSON.parse(localStorage.getItem(KEY))); } catch { return []; } },
@@ -29,7 +30,7 @@ const base = () => config.url.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, 
 export async function fetchBoard() {
   if (!online) { state.cache = tidy(local.get()); return state.cache; }
   try {
-    const r = await fetch(base() + '?select=name,score,level&order=score.desc,created_at.asc&limit=10', { headers: headers() });
+    const r = await fetch(base() + (config.verificationUrl?'?select=name,score,level,verified&order=verified.desc,score.desc,created_at.asc&limit=10':'?select=name,score,level&order=score.desc,created_at.asc&limit=10'), { headers: headers() });
     if (!r.ok) throw new Error(r.status);
     state.cache = tidy(await r.json());
     state.status = 'ok';
@@ -46,10 +47,12 @@ export async function submitScore(entry) {
     const b = local.get(); b.push(entry); b.sort((x, y) => y.score - x.score); local.set(b.slice(0, 10));
     await fetchBoard(); return { ok: true };
   }
+  if(verifiedOnline()){try{await finishRun(entry.name);await fetchBoard();return {ok:true};}catch(e){return {ok:false,reason:e.message};}}
   try {
     const r = await fetch(config.submissionUrl || base(), { method: 'POST', headers: { ...headers(), Prefer: 'return=minimal' }, body: JSON.stringify(entry) });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
+      if (r.status === 410) return {ok:false,reason:'Reload the game before playing to save a verified score.'};
       // database rules (supabase/name_filter.sql, supabase/protection.sql)
       if (body.code === '23514' && /plausible/.test(body.message || '')) return { ok: false, reason: "That score doesn't look right." };
       if (body.code === '23514') return { ok: false, reason: "That name isn't allowed." };

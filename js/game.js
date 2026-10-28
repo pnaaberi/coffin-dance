@@ -1,3 +1,5 @@
+import {createRun,advance,applyEvent,dayCfg,elapsed} from '../supabase/functions/_shared/gameplay.js';
+import * as verification from './run-client.js';
 // Coffin Dance - main game: scene, dancers, rhythm, audio, UI
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -355,20 +357,13 @@ const store={get(k,d){try{return JSON.parse(localStorage.getItem('cdr_'+k))??d}c
 let run,mode='play';
 function newRun(){run={level:1,up:{shoulders:0,ears:0,hype:0,spare:0}}}
 // endless: each level is one song, a bit faster and denser than the last
-const dayCfg=d=>({bpm:Math.min(118+d*5,170),bars:24+Math.min(d,6)*2,dbl:Math.min(.08+d*.07,.6),trip:d>=4?Math.min((d-3)*.05,.25):0});
+let verifiedState=null,lastCheckpoint=0;
 
 /* ---------- chart ---------- */
 let notes=[],cfg;
 let phrases=[];
 // PaRappa-style call & response: the lead bearer shows a 1-bar pattern, then you repeat it on the next bar
-function buildChart(){notes=[];phrases=[];const total=BARS*4;let rnd=7+run.level*13;const r=()=>(rnd=(rnd*9301+49297)%233280)/233280;
-  for(let start=8;start+4<=total-2;start+=4){
-    const k=Math.min(7,2+Math.round(cfg.dbl*6)+(cfg.trip>0?1:0)+(start>total/2?1:0));
-    const slots=new Set([0]);let guard=0;while(slots.size<k&&guard++<50)slots.add(Math.floor(r()*8));
-    let last=-1;const pat=[...slots].sort((x,y)=>x-y).map(sl=>{let l=Math.floor(r()*4);if(l===last&&r()<.6)l=(l+1)%4;last=l;return {off:sl/2,l}});
-    for(const p of pat){p.note={t:offset+(start+p.off)*spb(),l:p.l,hit:false};notes.push(p.note)}
-    phrases.push({start,pat})}
-  notes.sort((x,y)=>x.t-y.t)}
+function buildChart(){notes=verifiedState.notes;phrases=verifiedState.phrases;}
 function phraseAt(b){for(const p of phrases)if(b>=p.start-.5&&b<p.start+4-.5)return p;return null}
 const CALLF=[67,71,74,79].map(n=>440*2**((n-69)/12));
 function scheduleCalls(out){for(const p of phrases)for(const q of p.pat){const t=startAt+(p.start+q.off)*spb();
@@ -408,14 +403,22 @@ const ICON_OFF='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="tru
 function toggleMute(){muted=!muted;if(!muted&&volume===0)volume=.6;applyVol()}
 const volRow=()=>`<div class="volrow"><label>Volume <input class="vol" type="range" min="0" max="100" value="${Math.round(volume*100)}" aria-label="Volume"></label></div>`;
 function wireVol(){card.querySelectorAll('.vol').forEach(r=>r.oninput=()=>{volume=r.value/100;muted=volume===0;applyVol()})}
-function pauseGame(){if(!playing||paused)return;pauseClock=audioNow();paused=true;try{ac.suspend()}catch{}
+function pauseGame(){if(!playing||paused)return;pauseClock=audioNow();recordTick(pauseClock-startAt);if(!playing)return;paused=true;verification.checkpoint('pause').catch(()=>{});try{ac.suspend()}catch{}
   screen(`<h1>Paused</h1><p>Level ${run.level} · Score ${score}</p>${volRow()}<button data-a="resume">▶ Resume</button><button data-a="quitrun">Quit</button><p style="font-size:13px;opacity:.7">Esc / P to resume</p>`,'pause');wireVol()}
-function resumeGame(){if(!paused)return;menu.style.display='none';document.body.classList.remove('menuopen');ac.resume().then(()=>{clkOff=null;paused=false})}
+let resuming=false;
+async function resumeGame(){if(!paused||resuming)return;resuming=true;
+  try{await verification.checkpoint('play');await ac.resume();clkOff=null;paused=false;menu.style.display='none';document.body.classList.remove('menuopen');}
+  catch{const button=card.querySelector('[data-a="resume"]');if(button)button.textContent='Connection failed — retry Resume';}
+  finally{resuming=false;}}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame()});
 addEventListener('blur',()=>pauseGame());
 const songTime=()=>{const f=renderer.info.render.frame;if(f!==clkFrame){clkFrame=f;clkVal=audioNow()-startAt}return clkVal};
 const win=()=>.16*(1+.15*run.up.ears),mult=()=>1+Math.floor(combo/(10-2*run.up.hype));
-function damage(){combo=0;miss++;SHAKE=Math.min(.12,SHAKE+.05);FLIM=Math.min(1,FLIM+.25);balance-=12*(1-.2*run.up.shoulders);if(balance<=0)fall()}
+function syncRules(){const previousMiss=miss;({score,combo,maxCombo,miss,hits,perf,balance}=verifiedState);
+  if(miss>previousMiss){SHAKE=Math.min(.12,SHAKE+.05);FLIM=Math.min(1,FLIM+.25);show('MISS','#ff4040')}
+  if(verifiedState.dead&&playing)fall();}
+function rulesTime(t){return Math.max(verifiedState.t,Math.min(t,verifiedState.duration+1));}
+function recordTick(t){if(verifiedState.dead)return;const event={kind:'tick',level:run.level,t:rulesTime(t)};applyEvent(verifiedState,event);verification.record(event);syncRules();}
 function fall(){balance=0;dropT=songTime();playing=false;dropCoffin();
   // each dancer facepalms in turn once the coffin has hit the sand; hold on the scene ~5 s before the score screen
   ALL().forEach((d,i)=>{d.palmAt=performance.now()+900+i*170+Math.random()*80;d.slapped=false});
@@ -426,13 +429,13 @@ function slapSound(pan){if(!ac)return;const t=ac.currentTime,n=ac.createBufferSo
   const lo=ac.createOscillator(),lg=ac.createGain();lo.frequency.setValueAtTime(180,t);lo.frequency.exponentialRampToValueAtTime(60,t+.06);lg.gain.setValueAtTime(.35,t);lg.gain.exponentialRampToValueAtTime(.001,t+.08);
   const g=ac.createGain();g.gain.value=.9;const p=ac.createStereoPanner();p.pan.value=pan;
   n.connect(bp).connect(g).connect(p).connect(outBus);lo.connect(lg).connect(p);n.start(t);lo.start(t);lo.stop(t+.1)}
-function hitLane(l){if(!playing||paused)return;press[l]=performance.now();const t=audioNow()-startAt,w=win();
-  {const b=t/spb();if(!phraseAt(b)&&!phraseAt(b+.5))return} // only judge during your bar
-  let best=null,bd=1;for(const n of notes){if(n.t-t>w)break;if(n.hit||n.l!==l)continue;const d=Math.abs(n.t-t);if(d<bd){bd=d;best=n}}
-  if(best&&bd<w){best.hit=true;best.ok=true;best.ht=performance.now();combo++;hits++;maxCombo=Math.max(maxCombo,combo);
-    const [p,txt,c,heal]=bd<w*.32?[300,'PERFECT','#f3cf6a',3]:bd<w*.62?[150,'GREAT','#f4f1ea',2]:[50,'OK','#c9a27a',.5];
-    if(heal===3)perf++;hitSound(best,heal>=3?3:heal>=2?2:1);FLIM=Math.max(0,FLIM-.18);PULSE=1;score+=p*mult();balance=Math.min(100,balance+heal);show(txt,c)}
-  else{damage();missSound();show('WRONG','#ff4040')}}
+function hitLane(l){if(!playing||paused)return;press[l]=performance.now();const t=rulesTime(audioNow()-startAt);
+  advance(verifiedState,t);if(verifiedState.dead){verification.record({kind:'tick',level:run.level,t});syncRules();return;}
+  const event={kind:'hit',level:run.level,t,l},result=applyEvent(verifiedState,event);verification.record(event);syncRules();
+  if(!result)return;
+  if(result.grade){result.note.ht=performance.now();hitSound(result.note,result.grade);FLIM=Math.max(0,FLIM-.18);PULSE=1;
+    show(['','OK','GREAT','PERFECT'][result.grade],['','#c9a27a','#f4f1ea','#f3cf6a'][result.grade]);}
+  else{missSound();show('WRONG','#ff4040');}}
 // hit sounds: a marimba-like pluck on a tone of the current chord, snapped to the beat grid so it plays in time with the track
 function hitSound(n,grade){if(!ac||!master)return;const beat=(n.t-offset)/spb(),bar=Math.floor(beat/4),ch=prog[Math.floor(bar/2)%4];
   const midi=[ch[0],ch[1],ch[2],ch[0]+12][n.l]+12,f=440*2**((midi-69)/12);
@@ -468,10 +471,10 @@ function boardHtml(hl){const b=board();if(lb.state.status==='loading')return '<p
   if(!b.length)return '<p style="opacity:.7">No scores yet. Be the first!</p>';
   return '<table style="width:100%;border-collapse:collapse;font-size:14px;text-align:left">'+
   '<tr style="opacity:.7"><th>#</th><th>Name</th><th>Level</th><th style="text-align:right">Score</th></tr>'+
-  b.map((e,i)=>`<tr style="${i===hl?'color:#f3cf6a;font-weight:800':''}"><td>${i+1}</td><td>${esc(e.name)}</td><td>${e.level}</td><td style="text-align:right">${e.score}</td></tr>`).join('')+'</table>'}
+  b.map((e,i)=>`<tr style="${i===hl?'color:#f3cf6a;font-weight:800':''}"><td>${i+1}</td><td>${esc(e.name)}${ONLINE&&config.verificationUrl&&!e.verified?' <small>(legacy)</small>':''}</td><td>${e.level}</td><td style="text-align:right">${e.score}</td></tr>`).join('')+'</table>'}
 function scores(hl=-1,fresh=false){if(!fresh&&ONLINE){fetchBoard().then(()=>{if(card.dataset.screen==='scores')scores(hl,true)})}
   screen(`<h1><svg class="tro" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 14.9V17h3v2H8v-2h3v-2.1A5 5 0 0 1 8.3 12H8a4 4 0 0 1-4-4V5h3V3zm0 4H6v1a2 2 0 0 0 1 1.7V7zm10 0v2.7A2 2 0 0 0 18 8V7h-1zM7 20h10v2H7z"/></svg>High scores</h1>${boardHtml(hl)}<br><button data-a="play">▶ Play</button><button data-a="title">Menu</button><p style="font-size:12px;opacity:.6;margin-bottom:0">${privacyNote()}</p>`,'scores')}
-function endRun(){const b=board(),qualifies=score>0&&(b.length<10||score>b[b.length-1].score);
+function endRun(){const b=board(),qualifies=score>0&&(verification.verifiedOnline()||b.length<10||score>b[b.length-1].score);
   screen(`<h1>💥 Coffin dropped</h1>
   <p>Score <b>${score}</b> · Level ${run.level} · Max combo ${maxCombo}</p>
   ${qualifies?`<p><b>New high score!</b><br><input id="nm" maxlength="16" placeholder="Name" value="${esc(store.get('name',''))}" style="padding:8px;border-radius:8px;border:0;font-size:16px;width:60%"> <button id="sv">Save</button><br><span id="nmerr" style="color:#ff8a7a;font-size:13px;min-height:1em;display:inline-block"></span><br><span style="font-size:12px;opacity:.65">${privacyNote()}</span></p>`:''}
@@ -489,9 +492,9 @@ function endRun(){const b=board(),qualifies=score>0&&(b.length<10||score>b[b.len
     sv.onclick=save;nm.onkeydown=ev=>{ev.stopPropagation();if(ev.key==='Enter')save()}}}
 function fail(){endRun()}
 function quit(){playing=false;try{src?.stop()}catch{}try{master?.disconnect()}catch{}title()}
-function nextLevel(){run.level++;cfg=dayCfg(run.level);show('LEVEL '+run.level,'#f3cf6a');start(true)}
+function nextLevel(){const event={kind:'next',level:run.level,t:rulesTime(songTime())};applyEvent(verifiedState,event);verification.record(event);run.level++;cfg=dayCfg(run.level);show('LEVEL '+run.level,'#f3cf6a');start(true)}
 function quitRun(){paused=false;playing=false;try{ac.resume()}catch{}try{master?.disconnect()}catch{}title()}
-const ACT={resume:resumeGame,quitrun:quitRun,scores:()=>scores(),title,play(){mode='play';newRun();cfg=dayCfg(1);start()}};
+const ACT={resume:resumeGame,quitrun:quitRun,scores:()=>scores(),title,async play(){ensureAudio();ac.resume();screen('<h1>Starting…</h1>');try{const seed=await verification.startRun();verifiedState=createRun(seed);lastCheckpoint=0;mode='play';newRun();cfg=dayCfg(1);start()}catch{screen('<h1>Couldn’t start online game</h1><p>Check your connection and try again.</p><button data-a="play">Retry</button><button data-a="title">Menu</button>')}}};
 
 function start(cont){ensureAudio();ac.resume();paused=false;
   noiseB=ac.createBuffer(1,ac.sampleRate*.1,ac.sampleRate);noiseB.getChannelData(0).forEach((_,i,a)=>a[i]=Math.random()*2-1);
@@ -662,7 +665,8 @@ function frame(){if(wasPlaying!==playing){wasPlaying=playing;document.body.class
   const show_=playing;bar.style.display=lbl.style.display=show_?'block':'none';lc.style.visibility=show_?'visible':'hidden';
   if(!show_||paused)document.getElementById('hint').style.opacity=0;
   if(show_&&!paused){const st=songTime();
-    for(const n of notes){if(n.hit)continue;if(n.t-st<-win()){n.hit=true;n.miss=true;damage();show('MISS','#ff4040');if(!playing)break}else break}
+    if(!verifiedState.dead){advance(verifiedState,rulesTime(st));if(verifiedState.dead){verification.record({kind:'tick',level:run.level,t:verifiedState.t});}syncRules();}
+    if(playing&&elapsed(verifiedState)-lastCheckpoint>=5){recordTick(st);lastCheckpoint=elapsed(verifiedState);verification.checkpoint().catch(()=>{});}
     drawBar(st/spb(),now);
     // first-play hint: show what to press for the first few notes of a run
     {const hintEl=document.getElementById('hint'),nb=st/spb(),nx=notes.find(n=>!n.hit&&n.t>st-.1);

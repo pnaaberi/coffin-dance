@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import config from '../js/config.js';
+config.verificationUrl = ''; // Explicit legacy/offline fixture; no live calls.
 
 config.url = 'https://scores.example.test';
 config.submissionUrl = config.url + '/functions/v1/submit-score';
