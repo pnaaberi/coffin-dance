@@ -1,0 +1,133 @@
+# Coffin Dance
+
+A browser rhythm game. Hit **← ↓ ↑ →** (or tap the arrow buttons on a phone) as the buttons reach the gold
+handle to keep the pallbearers in step and the coffin on their shoulders. Every song gets faster; drop the
+coffin and it's game over. Scores are saved in your browser by default; an optional Supabase setup
+adds a shared online board.
+
+Built with [three.js](https://threejs.org) and the Web Audio API. No build step and nothing to install.
+
+**Controls:** arrow keys or on-screen buttons · **P** / **Esc** pause · **M** mute.
+The game pauses itself when you switch tabs or apps.
+
+## Project structure
+
+```
+index.html                page shell, social-preview tags, import map
+css/style.css             HUD, menus, buttons, touch controls
+js/game.js                scene, dancers, rhythm engine, audio, physics, UI
+js/leaderboard.js         high-score board (Supabase, or localStorage when not configured)
+js/config.js              Supabase URL + publishable key + removal contact
+js/profanity.js           name filter (generated, see below)
+vendor/three/             three.js 0.160 (MIT), so the game doesn't depend on a CDN
+assets/og-image.png       picture shown when the link is shared
+supabase/schema.sql       scores table + Row Level Security
+supabase/name_filter.sql  the name filter, enforced by the database
+supabase/protection.sql   rate limits, score sanity check, column permissions
+tools/wordlist.py         blocked-word lists (edit these)
+tools/gen_filter.py       regenerates js/profanity.js + supabase/name_filter.sql
+```
+
+The 3D models are **not** in this repo: they load from Polyfork's CDN (see Credits).
+
+## Run locally
+
+Browsers don't load ES modules from `file://`, so serve the folder:
+
+```sh
+python3 -m http.server 8000      # then open http://localhost:8000
+```
+
+## Deploy (GitHub Pages)
+
+1. Push this folder to a GitHub repository.
+2. **Settings → Pages** → Source: *Deploy from a branch*, branch `main`, folder `/ (root)`.
+3. The game is live at `https://<user>.github.io/<repo>/` after a minute.
+4. In `index.html`, change `og:image` to the full address
+   (`https://<user>.github.io/<repo>/assets/og-image.png`) and `og:url` to the game address, so link
+   previews work everywhere.
+
+## Online high scores (Supabase)
+
+Run these in the Supabase **SQL Editor**, in order (each is safe to run again):
+
+1. `supabase/schema.sql`: the table and read/insert rules
+2. `supabase/name_filter.sql`: rejects offensive names
+3. `supabase/protection.sql`: rate limits, impossible-score check, hides private columns
+
+Then put the **Project URL** and **publishable** key in `js/config.js`, and a `contact` (email or a GitHub
+issues link) so players know how to get a name removed.
+The repository ships with empty credentials. Never use a service-role or secret key in browser code.
+Run all three SQL scripts before enabling the online board; `schema.sql` alone is not the hardened setup.
+
+What the database enforces, even against someone calling the API directly with the public key:
+
+- read only `name, score, level, created_at`; insert only `name, score, level`; no update or delete
+- names: 1 to 16 characters from letters, numbers, spaces and `. _ - '`, passing the profanity filter
+- scores: a coarse upper bound based on the submitted level
+- best-effort limits of 3 scores per minute per connection hash and 40 per minute globally
+- the time is set by the server; the scores table stores an IP-derived hash instead of the raw address
+- maintenance functions cannot be called by public or authenticated API clients
+
+Scores are still reported by the player's browser, so a determined cheater can post a plausible fake.
+Remove those in **Table Editor → scores**. `supabase/protection.sql` also includes an optional daily
+clean-up job (keeps the top 100 forever and drops other rows after 30 days).
+The trigger's count checks are not atomic under concurrent requests, and its IP headers must come from a
+trusted proxy. These limits are not a denial-of-service defense. Use a trusted submission endpoint and
+atomic rate limiting for an abuse-resistant public leaderboard. The fixed-salt MD5 value is pseudonymous,
+not anonymous: it can be guessed for known IP addresses. Hosting providers may also retain request logs.
+
+## Checks
+
+Run the leaderboard regression checks with Node.js 22 or later:
+
+```sh
+node --test tests/leaderboard.test.mjs
+```
+
+They cover valid saves, corrupted browser storage, unsafe score fields and invalid submissions.
+The bundled `vendor/three/` files are from three.js r160; keep its MIT licence with any redistribution.
+
+## Name filter
+
+The same rules run in the game (live while typing; Save stays disabled until the name passes), in the
+database, and again before names are displayed (anything that slipped in shows as `***`).
+
+It catches leetspeak (`sh1t`, `$hit`), separators (`f.u.c.k`, `a s s`), stretched letters (`fuuuck`),
+accents (`fück`), look-alike and phonetic Cyrillic/Greek letters, full-width letters, invisible
+characters, reversed words, camelCase (`BigAss`), hate codes (`1488`), and words in English, Finnish,
+Swedish, German, Spanish, Portuguese, Italian, French and Russian. A whitelist keeps names like
+Scunthorpe, Dickens or Cocktail working.
+
+To change it, edit `tools/wordlist.py`, then from the `tools` folder run `python3 gen_filter.py`, copy the
+generated `profanity.js` into `js/` and `name_filter.sql` into `supabase/`, and re-run that SQL in Supabase.
+
+## Launch checklist
+
+- [ ] All three SQL files run in Supabase; one test score saved from the live site
+- [ ] `contact` filled in `js/config.js`
+- [ ] `og:image` / `og:url` set to full addresses; link preview checked (paste the link in a chat)
+- [ ] Two-factor login on your Supabase and GitHub accounts; Supabase on the Free plan (no surprise bills)
+- [ ] Played once on a phone (portrait) and in another browser (Firefox or Safari)
+- [ ] 3 to 5 friends played it; difficulty feels fair
+- [ ] Free Supabase projects pause after about a week without visits: if the board says it can't reach
+      the server, open the Supabase dashboard and restore the project
+
+## Privacy
+
+The game creates no accounts or cookies. By default scores stay in the player's browser (localStorage),
+along with volume, mute and the last name typed. If the online board is configured, saved names, scores
+and levels are sent to Supabase, timestamped and publicly readable. The scores table also keeps an
+IP-derived hash for rate limiting; this is pseudonymous data, and provider request logs are separate.
+Players can ask for an online entry to be removed via the contact in `js/config.js`.
+The browser loads models from Polyfork, which receives the request's network metadata.
+
+## Credits
+
+- 3D models by [Polyfork](https://polyfork.dev), loaded from their CDN: Blackjack Dealer (restyled into
+  the pallbearers), Coffin Prop, Termite Mound, Dead Tree, Broad Canopy Shade Tree and Wood Ant.
+  Free for use in games with no attribution required, but the files themselves may not be redistributed,
+  which is why they're not in this repo ([licence](https://polyfork.dev/licensing)).
+- [three.js](https://threejs.org), MIT licence (`vendor/three/LICENSE`).
+- Music and sound effects: original, generated live in the browser.
+- Inspired by the *Coffin Dance* meme.

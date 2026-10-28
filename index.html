@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coffin Dance</title>
+<meta name="description" content="Keep the pallbearers in step and the coffin on their shoulders. A browser rhythm game with an online high-score board.">
+<meta name="theme-color" content="#d9a632">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M22 2h20l10 16-6 44H18L12 18z' fill='%237a4524' stroke='%232a160c' stroke-width='3'/%3E%3Cpath d='M32 14v26M24 22h16' stroke='%23d9a632' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- Link previews (WhatsApp, Discord, X, LinkedIn...). After deploying, change og:image and og:url to full https:// addresses. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Coffin Dance">
+<meta property="og:description" content="Keep the pallbearers in step and the coffin on their shoulders. Can you top the board?">
+<meta property="og:image" content="assets/og-image.png">
+<meta property="og:url" content="">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/build/three.module.min.js",
+  "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="load">Summoning pallbearers…</div>
+<button id="snd" aria-label="Mute"></button><button id="pz" aria-label="Pause">❚❚</button>
+<div id="hud"><div id="score">0</div><div id="combo"></div></div>
+<canvas id="lanes"></canvas>
+<div id="judge"></div>
+<div id="hint" aria-live="polite"></div>
+<div id="touch"><button data-l="0" aria-label="Left">←</button><button data-l="1" aria-label="Down">↓</button><button data-l="2" aria-label="Up">↑</button><button data-l="3" aria-label="Right">→</button></div>
+<div id="menu" style="display:none"><div class="card">
+  <h1>⚰️ Coffin Dance</h1>
+  <p>Hit <b>← ↓ ↑ →</b> when the arrows reach the line. Miss too many and the coffin hits the floor.</p>
+  <p id="info" style="font-size:14px"></p>
+  <button id="play">Play</button>
+  <label class="btn">Use my own song<input id="file" type="file" accept="audio/*" hidden></label>
+  <div style="font-size:13px;margin-top:8px">Song BPM: <input id="bpm" type="number" value="126" style="width:60px"> · offset (s): <input id="off" type="number" value="0" step="0.05" style="width:60px"></div>
+</div></div>
+<script type="module" src="js/game.js"></script>
+</body>
+</html>
